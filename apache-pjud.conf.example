@@ -1,0 +1,21 @@
+# Requiere módulos: proxy proxy_http headers rewrite
+# Uso típico en Apache local/MAMP:
+# Include /ruta/al/proyecto/apache-pjud.conf.example
+
+ProxyPreserveHost On
+RequestHeader set X-Forwarded-Prefix "/pjud"
+
+# Desactivar compresión y buffering para SSE (Server-Sent Events)
+SetEnv no-gzip 1
+SetEnv gzip-only-text/html 1
+
+ProxyPass /pjud/static !
+Alias /pjud/static "/ABSOLUTE_PATH_TO_PROJECT/static"
+<Directory "/ABSOLUTE_PATH_TO_PROJECT/static">
+    Require all granted
+</Directory>
+
+RedirectMatch 302 ^/pjud$ /pjud/
+# flushpackets=on: Apache reenvía cada chunk al browser inmediatamente (necesario para SSE)
+ProxyPass /pjud/ http://127.0.0.1:8091/ flushpackets=on
+ProxyPassReverse /pjud/ http://127.0.0.1:8091/

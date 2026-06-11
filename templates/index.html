@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PJUD Consulta</title>
+  <link rel="stylesheet" href="{{ base_path }}/static/style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>PJUD Consulta</h1>
+    <form id="search-form">
+      <div class="tabs">
+        <label class="tab">
+          <input type="radio" name="tipo_busqueda" value="rut" checked>
+          <span>Por RUT</span>
+        </label>
+        <label class="tab">
+          <input type="radio" name="tipo_busqueda" value="nombre">
+          <span>Por Nombre</span>
+        </label>
+      </div>
+
+      <div class="panel" id="panel-rut">
+        <div class="row">
+          <div class="field">
+            <label>RUT</label>
+            <input type="text" name="rut" placeholder="12.345.678-9">
+          </div>
+          <div class="field small">
+            <label>DV</label>
+            <input type="text" name="dv" placeholder="9">
+          </div>
+          <div class="field">
+            <label>Período</label>
+            <select name="periodo">
+              <option value="5" selected>Últimos 5 años</option>
+              <option value="10">Últimos 10 años</option>
+              <option value="all">Todos</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Tipo</label>
+            <select name="persona_tipo">
+              <option value="natural">Persona natural</option>
+              <option value="juridica">Persona jurídica</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" id="panel-nombre">
+        <div class="row">
+          <div class="field">
+            <label>Nombre</label>
+            <input type="text" name="nombre" placeholder="Nombre">
+          </div>
+          <div class="field">
+            <label>Apellido paterno</label>
+            <input type="text" name="apellido_p" placeholder="Apellido paterno">
+          </div>
+          <div class="field">
+            <label>Apellido materno</label>
+            <input type="text" name="apellido_m" placeholder="Apellido materno">
+          </div>
+        </div>
+      </div>
+
+      <div class="competencias">
+        <div class="label">Competencias</div>
+        <div class="checks">
+          {% for c in competencias %}
+            <label><input type="checkbox" name="competencias" value="{{ c }}" checked> {{ c }}</label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <button type="submit" id="btn-buscar">Buscar</button>
+    </form>
+
+    <div id="search-status" class="search-status" style="display:none">
+      <div class="progress-header">
+        <span id="progress-label">Iniciando...</span>
+        <span id="progress-count"></span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+    </div>
+
+    <div id="error-msg" class="error" style="display:none"></div>
+
+    <div id="results-wrap" style="display:none">
+      <div class="results-header">
+        <span id="results-count">0 resultado(s)</span>
+      </div>
+      <div class="table">
+        <table>
+          <thead>
+            <tr>
+              <th>Competencia</th>
+              <th>RIT</th>
+              <th>RUC</th>
+              <th>Tribunal</th>
+              <th>Caratulado</th>
+              <th>Fecha</th>
+              <th>Estado</th>
+              <th>Ubicación</th>
+              <th>Tipo recurso</th>
+            </tr>
+          </thead>
+          <tbody id="results-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="empty-msg" class="empty" style="display:none">Sin resultados.</div>
+  </div>
+
+  <script>
+    const BASE_PATH = "{{ base_path }}";
+
+    // --- tab visibility ---
+    const tabs = document.querySelectorAll('input[name="tipo_busqueda"]');
+    const panelRut = document.getElementById('panel-rut');
+    const panelNombre = document.getElementById('panel-nombre');
+    function refreshTabs() {
+      const val = document.querySelector('input[name="tipo_busqueda"]:checked').value;
+      panelRut.style.display = val === 'rut' ? 'block' : 'none';
+      panelNombre.style.display = val === 'nombre' ? 'block' : 'none';
+    }
+    tabs.forEach(t => t.addEventListener('change', refreshTabs));
+    refreshTabs();
+
+    // --- streaming search ---
+    const form        = document.getElementById('search-form');
+    const btnBuscar   = document.getElementById('btn-buscar');
+    const statusDiv   = document.getElementById('search-status');
+    const progressFill= document.getElementById('progress-fill');
+    const progressLbl = document.getElementById('progress-label');
+    const progressCnt = document.getElementById('progress-count');
+    const errorMsg    = document.getElementById('error-msg');
+    const resultsWrap = document.getElementById('results-wrap');
+    const resultsCnt  = document.getElementById('results-count');
+    const tbody       = document.getElementById('results-tbody');
+    const emptyMsg    = document.getElementById('empty-msg');
+
+    let currentES = null;
+    let rowCount = 0;
+
+    function esc(text) {
+      const d = document.createElement('span');
+      d.textContent = text || '';
+      return d.innerHTML;
+    }
+
+    function resetUI() {
+      statusDiv.style.display   = 'none';
+      errorMsg.style.display    = 'none';
+      resultsWrap.style.display = 'none';
+      emptyMsg.style.display    = 'none';
+      tbody.innerHTML = '';
+      progressFill.style.width = '0%';
+      rowCount = 0;
+    }
+
+    function setProgress(done, total, label) {
+      const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+      progressFill.style.width = pct + '%';
+      progressLbl.textContent = label || 'Buscando...';
+      progressCnt.textContent = total > 0 ? `${done} / ${total}` : '';
+    }
+
+    function addRows(causas) {
+      for (const c of causas) {
+        const tr = document.createElement('tr');
+        tr.innerHTML =
+          `<td>${esc(c.competencia)}</td>` +
+          `<td>${esc(c.rit)}</td>` +
+          `<td>${esc(c.ruc)}</td>` +
+          `<td>${esc(c.tribunal)}</td>` +
+          `<td>${esc(c.caratulado)}</td>` +
+          `<td>${esc(c.fecha_ingreso)}</td>` +
+          `<td>${esc(c.estado)}</td>` +
+          `<td>${esc(c.ubicacion)}</td>` +
+          `<td>${esc(c.tipo_recurso)}</td>`;
+        tbody.appendChild(tr);
+        rowCount++;
+      }
+      if (rowCount > 0) {
+        resultsWrap.style.display = 'block';
+        resultsCnt.textContent = rowCount + ' resultado(s)';
+      }
+    }
+
+    function finalize(ok) {
+      btnBuscar.disabled = false;
+      btnBuscar.textContent = 'Buscar';
+      if (ok && rowCount === 0) {
+        emptyMsg.style.display = 'block';
+      }
+      if (ok) {
+        progressLbl.textContent = 'Listo';
+        progressFill.style.width = '100%';
+      }
+    }
+
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      if (currentES) { currentES.close(); currentES = null; }
+
+      resetUI();
+      btnBuscar.disabled = true;
+      btnBuscar.textContent = 'Buscando...';
+      statusDiv.style.display = 'block';
+
+      const params = new URLSearchParams(new FormData(form)).toString();
+      const url = BASE_PATH + '/buscar-stream?' + params;
+
+      currentES = new EventSource(url);
+
+      currentES.onmessage = function(event) {
+        const data = JSON.parse(event.data);
+
+        if (data.type === 'result') {
+          const yearStr = data.year ? ' ' + data.year : '';
+          setProgress(data.done, data.total, data.competencia + yearStr);
+          if (data.causas && data.causas.length > 0) addRows(data.causas);
+
+        } else if (data.type === 'done') {
+          currentES.close(); currentES = null;
+          finalize(true);
+
+        } else if (data.type === 'error') {
+          currentES.close(); currentES = null;
+          errorMsg.textContent = data.msg;
+          errorMsg.style.display = 'block';
+          finalize(false);
+        }
+      };
+
+      currentES.onerror = function() {
+        if (currentES) { currentES.close(); currentES = null; }
+        errorMsg.textContent = 'Error de conexión con el servidor.';
+        errorMsg.style.display = 'block';
+        finalize(false);
+      };
+    });
+  </script>
+</body>
+</html>

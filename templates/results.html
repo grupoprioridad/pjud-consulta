@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Resultados | PJUD Consulta</title>
+  <link rel="stylesheet" href="{{ base_path }}/static/style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Resultados</h1>
+    <div class="actions"><a href="{{ base_path }}/">Nueva búsqueda</a></div>
+
+    {% if error %}
+      <div class="error">{{ error }}</div>
+    {% endif %}
+
+    {% if resultados and resultados|length > 0 %}
+      <div class="table">
+        <table>
+          <thead>
+            <tr>
+              <th>Competencia</th>
+              <th>RIT</th>
+              <th>RUC</th>
+              <th>Tribunal</th>
+              <th>Caratulado</th>
+              <th>Fecha</th>
+              <th>Estado</th>
+              <th>Ubicación</th>
+              <th>Tipo recurso</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in resultados %}
+              <tr>
+                <td>{{ c.competencia }}</td>
+                <td>{{ c.rit }}</td>
+                <td>{{ c.ruc }}</td>
+                <td>{{ c.tribunal }}</td>
+                <td>{{ c.caratulado }}</td>
+                <td>{{ c.fecha_ingreso }}</td>
+                <td>{{ c.estado }}</td>
+                <td>{{ c.ubicacion }}</td>
+                <td>{{ c.tipo_recurso }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty">Sin resultados.</div>
+    {% endif %}
+  </div>
+</body>
+</html>
